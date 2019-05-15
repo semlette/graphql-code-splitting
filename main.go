@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"path/filepath"
 	"time"
+
+	"github.com/semlette/graphql-code-splitting/interpreter/lexer"
+	"github.com/semlette/graphql-code-splitting/parser"
 )
 
 func main() {
@@ -44,7 +47,41 @@ func graphqlHandler() http.HandlerFunc {
 		Data map[string]interface{} `json:"data"`
 	}
 
+	type query struct {
+		Query string `json:"query"`
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		var q query
+		err := json.NewDecoder(r.Body).Decode(&q)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			log.Printf("decode error: %s", err)
+			return
+		}
+		l := lexer.New(q.Query)
+		p := parser.New(l)
+		doc := p.Parse()
+		if err := p.Error(); err != nil {
+			log.Printf("parser error: %s", err)
+		} else {
+			for _, ss := range doc.Query.SelectionSets {
+				log.Printf("selection set: fields: %d, sub selection sets: %d", len(ss.Fields), len(ss.SelectionSets))
+			}
+			for _, fragment := range doc.Query.Fragments {
+				log.Printf(
+					"fragment %s on %s, fields: %d",
+					fragment.Name.Value,
+					fragment.TargetObject.Value,
+					len(fragment.SelectionSet.Fields),
+				)
+				for _, field := range fragment.SelectionSet.Fields {
+					log.Printf("- %s", field.Name.Value)
+				}
+			}
+		}
+
 		imports := []string{}
 
 		var posts []post
@@ -75,7 +112,7 @@ func graphqlHandler() http.HandlerFunc {
 				"posts": posts,
 			},
 		}
-		err := json.NewEncoder(w).Encode(resp)
+		err = json.NewEncoder(w).Encode(resp)
 		if err != nil {
 			log.Printf("encode error: %s", err)
 		}

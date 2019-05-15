@@ -13,21 +13,21 @@ async function importModule(path) {
 
 async function getData() {
     const query = `
-        query GetTimeline {
+        query {
             posts {
-                __typename
-                timestamp
-                ... Post_PhotoPost @push(module: "PhotoPost.js")
-                ... Post_TextPost @push(module: "TextPost.js")
+                __typename,
+                timestamp,
+                ... Post_PhotoPost,
+                ... Post_TextPost,
             }
         }
         
-        fragment Post_PhotoPost on Post {
-            photo_url
+        fragment PhotoPost on Post {
+            photo_url,
         }
         
-        fragment Post_TextPost on Post {
-            text
+        fragment TextPost on Post {
+            text,
         }
     `;
 
