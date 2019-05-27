@@ -17,11 +17,11 @@ async function getData() {
             posts {
                 __typename,
                 timestamp,
-                ... Post_PhotoPost,
-                ... Post_TextPost,
+                ... Post_PhotoPost @push(module: "PhotoPost.js"),
+                ... Post_TextPost @push(module: "TextPost.js"),
             }
         }
-        
+
         fragment PhotoPost on Post {
             photo_url,
         }

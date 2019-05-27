@@ -19,6 +19,19 @@ type Expression interface {
 	expressionNode()
 }
 
+type Query struct {
+	Token        token.Token
+	SelectionSet *SelectionSet
+	Fragments    []*Fragment
+}
+
+func (q *Query) TokenLiteral() string {
+	return q.Token.Literal
+}
+
+func (q *Query) statementNode() {}
+func (q *Query) queryNode()     {}
+
 type Fragment struct {
 	Token        token.Token
 	Name         *Identifier
@@ -39,13 +52,32 @@ func (fmnt *Fragment) TokenLiteral() string {
 }
 
 type Directive struct {
-	Name      string
-	Arguments map[string]string
+	Token     token.Token
+	Name      *Identifier
+	Arguments []*Argument
+}
+
+type Argument struct {
+	Token token.Token
+	Name  *Identifier
+	Value string // not going to support other value types for this expirement
+}
+
+type FieldNode interface {
+	fieldNode()
 }
 
 type Field struct {
-	Name       *Identifier
-	Directives []*Directive
+	Token        token.Token
+	Name         *Identifier
+	Directives   []*Directive
+	SelectionSet *SelectionSet
+	// Arguments map[string]interface{} // ha, don't need those
+}
+
+func (Field) fieldNode() {}
+func (f *Field) TokenLiteral() string {
+	return f.Token.Literal
 }
 
 type SelectionSetNode interface {
@@ -53,9 +85,9 @@ type SelectionSetNode interface {
 }
 
 type SelectionSet struct {
-	Token         token.Token
-	Fields        []*Field
-	SelectionSets []*SelectionSet
+	Token           token.Token
+	Fields          []*Field
+	FragmentSpreads []*FragmentSpread
 }
 
 func (SelectionSet) statementNode()    {}
@@ -65,8 +97,23 @@ func (ss *SelectionSet) TokenLiteral() string {
 	return ss.Token.Literal
 }
 
+type FragmentSpreadNode interface {
+	fragmentSpreadNode()
+}
+
+type FragmentSpread struct {
+	Token        token.Token
+	FragmentName *Identifier
+	Directive    *Directive
+}
+
+func (FragmentSpread) fragmentSpreadNode() {}
+func (fs *FragmentSpread) TokenLiteral() string {
+	return fs.Token.Literal
+}
+
 type Document struct {
-	Query     *Query
+	Operation *Query
 	Fragments []*Fragment
 }
 

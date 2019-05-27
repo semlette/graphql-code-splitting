@@ -33,24 +33,30 @@ func (p *Parser) nextToken() {
 
 func (p *Parser) Parse() *ast.Document {
 	doc := new(ast.Document)
+	fragments := []*ast.Fragment{}
 	for p.currToken.Type != token.EOF {
 		stmt := p.parseStatement()
 		if stmt != nil {
 			q, ok := stmt.(*ast.Query)
 			if ok {
-				doc.Query = q
+				doc.Operation = q
 				p.nextToken()
 				continue
 			}
 			fmnt, ok := stmt.(*ast.Fragment)
 			if ok {
-				q.Fragments = append(q.Fragments, fmnt)
+				fragments = append(fragments, fmnt)
 				p.nextToken()
 				continue
 			}
 		}
 		p.nextToken()
 	}
+	if doc.Operation == nil {
+		p.err = fmt.Errorf("no operation")
+		return nil
+	}
+	doc.Operation.Fragments = fragments
 	return doc
 }
 
@@ -67,9 +73,9 @@ func (p *Parser) parseStatement() ast.Statement {
 
 func (p *Parser) parseQuery() *ast.Query {
 	stmt := &ast.Query{
-		Token:         p.currToken,
-		SelectionSets: []*ast.SelectionSet{},
-		Fragments:     []*ast.Fragment{},
+		Token:        p.currToken,
+		SelectionSet: &ast.SelectionSet{Token: p.currToken},
+		Fragments:    []*ast.Fragment{},
 	}
 	// SKIP QUERY NAME
 	if !p.expectPeek(token.LBRACE) {
@@ -77,11 +83,47 @@ func (p *Parser) parseQuery() *ast.Query {
 		return nil
 	}
 	ss := p.parseSelectionSet()
-	if ss != nil {
-		stmt.SelectionSets = append(stmt.SelectionSets, ss)
-	}
+	stmt.SelectionSet = ss
 
 	return stmt
+}
+
+func (p *Parser) parseFields() []*ast.Field {
+	var fields []*ast.Field
+	for {
+		field := p.parseField()
+		if field == nil {
+			break
+		}
+		fields = append(fields, field)
+	}
+	return fields
+}
+
+func (p *Parser) parseField() *ast.Field {
+	field := &ast.Field{Token: p.currToken}
+	if !p.expectPeek(token.IDENT) {
+		p.peekErrorD(token.IDENT, "parseField()")
+		return nil
+	}
+	field.Name = &ast.Identifier{Token: p.currToken, Value: p.currToken.Literal}
+	// Skip parsing arguments
+
+	// Parse the next token.
+	// If it is a comma, the field selection is done.
+	// If it is a '{', a new SelectionSet has been started
+	switch {
+	case p.peekTokenIs(token.COMMA):
+		p.nextToken()
+	case p.peekTokenIs(token.LBRACE):
+		p.nextToken()
+		ss := p.parseSelectionSet()
+		field.SelectionSet = ss
+	default:
+		p.peekError(token.COMMA)
+		return nil
+	}
+	return field
 }
 
 func (p *Parser) parseFragment() *ast.Fragment {
@@ -112,47 +154,106 @@ func (p *Parser) parseFragment() *ast.Fragment {
 }
 
 func (p *Parser) parseSelectionSet() *ast.SelectionSet {
-	ss := new(ast.SelectionSet)
+	ss := &ast.SelectionSet{Token: p.currToken}
 	ss.Fields = []*ast.Field{}
-	ss.SelectionSets = []*ast.SelectionSet{}
-	switch {
-	case p.peekTokenIs(token.IDENT):
-		p.nextToken()
+	for {
 		switch {
-		case p.peekTokenIs(token.COMMA):
-			ss.Fields = append(ss.Fields, &ast.Field{
-				Name: &ast.Identifier{Token: p.currToken, Value: p.currToken.Literal},
-				// Directives TODO
-			})
+		case p.peekTokenIs(token.IDENT):
+			f := p.parseField()
+			if f == nil {
+				return nil
+			}
+			ss.Fields = append(ss.Fields, f)
+		case p.peekTokenIs(token.SPREAD):
+			// parse fragment spread
+			fs := p.parseFragmentSpread()
+			if fs == nil {
+				return nil
+			}
+			ss.FragmentSpreads = append(ss.FragmentSpreads, fs)
+		case p.peekTokenIs(token.RBRACE):
+			// return selection set
 			p.nextToken()
-		case p.peekTokenIs(token.LBRACE):
-			p.nextToken()
-			nextSS := p.parseSelectionSet()
-			ss.SelectionSets = append(ss.SelectionSets, nextSS)
+			return ss
 		default:
-			p.peekError(token.COMMA)
+			p.peekErrorD(token.RBRACE, "parseSelectionSet()")
 			return nil
 		}
+	}
+}
 
-	case p.peekTokenIs(token.SPREAD):
-		// Doesn't do anything to the query TODO
-		if !p.expectPeek(token.IDENT) {
-			p.peekError(token.IDENT)
-			return nil
-		}
-		if !p.expectPeek(token.COMMA) {
-			p.peekError(token.COMMA)
-			return nil
-		}
-
-	case p.peekTokenIs(token.RBRACE):
-		return ss
-
-	default:
-		p.peekError(token.IDENT)
+func (p *Parser) parseFragmentSpread() *ast.FragmentSpread {
+	fs := &ast.FragmentSpread{Token: p.currToken}
+	if !p.expectPeek(token.SPREAD) {
+		p.peekErrorD(token.SPREAD, "parseFragmentSpread()")
 		return nil
 	}
-	return ss
+	if !p.expectPeek(token.IDENT) {
+		p.peekErrorD(token.IDENT, "parseFragmentSpread()")
+		return nil
+	}
+	fs.FragmentName = &ast.Identifier{
+		Token: p.currToken,
+		Value: p.currToken.Literal,
+	}
+	if p.peekTokenIs(token.AT) {
+		d := p.parseDirective()
+		if d == nil {
+			return nil
+		}
+		fs.Directive = d
+	}
+	if !p.expectPeek(token.COMMA) {
+		p.peekErrorD(token.COMMA, "parseFragmentSpread()")
+		return nil
+	}
+	return fs
+}
+
+func (p *Parser) parseDirective() *ast.Directive {
+	d := &ast.Directive{Token: p.currToken}
+	if !p.expectPeek(token.AT) {
+		p.peekErrorD(token.AT, "parseDirective()")
+		return nil
+	}
+	if !p.expectPeek(token.IDENT) {
+		p.peekErrorD(token.IDENT, "parseDirective()")
+		return nil
+	}
+	d.Name = &ast.Identifier{Token: p.currToken, Value: p.currToken.Literal}
+	// Parse the arguments
+	if p.peekTokenIs(token.LPAREN) {
+		p.nextToken()
+		arg := p.parseArguments()
+		if arg == nil {
+			return nil
+		}
+		d.Arguments = []*ast.Argument{arg}
+	}
+	return d
+}
+
+func (p *Parser) parseArguments() *ast.Argument {
+	arg := &ast.Argument{Token: p.currToken}
+	if !p.expectPeek(token.IDENT) {
+		p.peekErrorD(token.IDENT, "parseArguments()")
+		return nil
+	}
+	arg.Name = &ast.Identifier{Token: p.currToken, Value: p.currToken.Literal}
+	if !p.expectPeek(token.COLON) {
+		p.peekErrorD(token.COLON, "parseArguments()")
+		return nil
+	}
+	if !p.expectPeek(token.STRING) {
+		p.peekErrorD(token.STRING, "parseArguments()")
+		return nil
+	}
+	arg.Value = p.currToken.Literal
+	if !p.expectPeek(token.RPAREN) {
+		p.peekErrorD(token.RPAREN, "parseArguments()")
+		return nil
+	}
+	return arg
 }
 
 func (p *Parser) currTokenIs(t token.Type) bool {
@@ -174,5 +275,10 @@ func (p *Parser) expectPeek(t token.Type) bool {
 
 func (p *Parser) peekError(t token.Type) {
 	err := fmt.Errorf("expected token to be %s but got %s instead (%s)", t, p.peekToken.Type, p.peekToken.Literal)
+	p.err = err
+}
+
+func (p *Parser) peekErrorD(t token.Type, details string) {
+	err := fmt.Errorf("%s: expected token to be %s but got %s instead", details, t, p.peekToken.Type)
 	p.err = err
 }

@@ -60,7 +60,8 @@ func (l *Lexer) NextToken() token.Token {
 	case ':':
 		tok = token.NewToken(token.COLON, l.ch)
 	case '"':
-		tok = token.NewToken(token.QUOTE, l.ch)
+		tok.Type = token.STRING
+		tok.Literal = l.readString()
 	case ',':
 		tok = token.NewToken(token.COMMA, l.ch)
 	case 0:
@@ -95,8 +96,23 @@ func (l *Lexer) peekChars(chars int) string {
 
 func (l *Lexer) readIdentifier() string {
 	pos := l.position
-	for isLetter(l.ch) {
+	for {
+		if isLetter(l.ch) || l.ch == '.' {
+			l.readChar()
+		} else {
+			break
+		}
+	}
+	return l.input[pos:l.position]
+}
+
+func (l *Lexer) readString() string {
+	pos := l.position + 1
+	for {
 		l.readChar()
+		if l.ch == '"' || l.ch == 0 {
+			break
+		}
 	}
 	return l.input[pos:l.position]
 }

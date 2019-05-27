@@ -15,7 +15,6 @@ const (
 	EOF     Type = "EOF"
 	IDENT   Type = "IDENT"
 	AT      Type = "@"
-	QUOTE   Type = "\""
 	SPREAD  Type = "..."
 	LBRACE  Type = "{"
 	RBRACE  Type = "}"
@@ -23,6 +22,8 @@ const (
 	RPAREN  Type = ")"
 	COLON   Type = ":"
 	COMMA   Type = ","
+
+	STRING Type = "STRING"
 
 	QUERY    Type = "QUERY"
 	ON       Type = "ON"
