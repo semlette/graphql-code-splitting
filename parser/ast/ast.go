@@ -4,7 +4,6 @@ import (
 	"github.com/semlette/graphql-code-splitting/interpreter/token"
 )
 
-// Node is an AST node
 type Node interface {
 	TokenLiteral() string
 }

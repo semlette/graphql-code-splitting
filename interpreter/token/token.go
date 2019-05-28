@@ -4,7 +4,6 @@ package token
 type Type string
 
 // Token is lexical token
-// TODO
 type Token struct {
 	Type    Type
 	Literal string

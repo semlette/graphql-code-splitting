@@ -22,11 +22,11 @@ async function getData() {
             }
         }
 
-        fragment PhotoPost on Post {
+        fragment Post_PhotoPost on PhotoPost {
             photo_url,
         }
         
-        fragment TextPost on Post {
+        fragment Post_TextPost on TextPost {
             text,
         }
     `;

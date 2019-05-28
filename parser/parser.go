@@ -77,7 +77,7 @@ func (p *Parser) parseQuery() *ast.Query {
 		SelectionSet: &ast.SelectionSet{Token: p.currToken},
 		Fragments:    []*ast.Fragment{},
 	}
-	// SKIP QUERY NAME
+
 	if !p.expectPeek(token.LBRACE) {
 		p.peekError(token.LBRACE)
 		return nil
@@ -254,10 +254,6 @@ func (p *Parser) parseArguments() *ast.Argument {
 		return nil
 	}
 	return arg
-}
-
-func (p *Parser) currTokenIs(t token.Type) bool {
-	return p.currToken.Type == t
 }
 
 func (p *Parser) peekTokenIs(t token.Type) bool {
